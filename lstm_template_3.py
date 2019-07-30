@@ -31,8 +31,7 @@ def softmax(x):
     return e_x / e_x.sum()
 
 # data I/O
-# data = open('data/input.txt', 'r').read()  # should be simple plain text file
-data = open('data/linux-kernel.txt', 'r').read()  # should be simple plain text file
+data = open('data/input.txt', 'r').read()  # should be simple plain text file
 chars = list(set(data))
 data_size, vocab_size = len(data), len(chars)
 print('data has %d characters, %d unique.' % (data_size, vocab_size))
@@ -44,8 +43,8 @@ option = sys.argv[1]
 
 # hyperparameters
 emb_size = 4
-hidden_size = 32  # size of hidden layer of neurons
-seq_length = 64  # number of steps to unroll the RNN for
+hidden_size = 192  # size of hidden layer of neurons
+seq_length = 96  # number of steps to unroll the RNN for
 learning_rate = 5e-2
 max_updates = 500000
 
@@ -79,21 +78,43 @@ def forward_step(x, h_prev, C_prev):
     assert h_prev.shape == (hidden_size, 1)
     assert C_prev.shape == (hidden_size, 1)
 
-    # z = np.row_stack((h_prev, x))
+    # compute the forget gate
+    # f_gate = sigmoid (W_f \cdot [h X] + b_f)
+    f = sigmoid(np.dot(Wf, x) + bf)
 
-    z = x
-    f = sigmoid(np.dot(Wf, z) + bf)
-    i = sigmoid(np.dot(Wi, z) + bi)
-    C_bar = tanh(np.dot(Wc, z) + bc)
+    # compute the input gate
+    # i_gate = sigmoid (W_i \cdot [h X] + b_i)
+    i = sigmoid(np.dot(Wi, x) + bi)
 
+    # compute the candidate memory
+    # \hat{c} = tanh (W_c \cdot [h X] + b_c])
+    C_bar = tanh(np.dot(Wc, x) + bc)
+
+    # new memory: applying forget gate on the previous memory
+    # and then adding the input gate on the candidate memory
+    # c_new = f_gate * prev_c + i_gate * \hat{c}
     C = f * C_prev + i * C_bar
-    o = sigmoid(np.dot(Wo, z) + bo)
+
+    # output gate
+    # o_gate = sigmoid (Wo \cdot [h X] + b_o)
+    o = sigmoid(np.dot(Wo, x) + bo)
+
+    # new hidden state for the LSTM
+    # h = o_gate * tanh(c_new)
     h = o * tanh(C)
 
+    # DONE LSTM
+    # output layer - softmax and cross-entropy loss
+    # unnormalized log probabilities for next chars
+
+    # o = Why \cdot h + by
     y = np.dot(Why, h) + by
+
+    # softmax for probabilities for next chars
+    # p = softmax(o)
     p = np.exp(y) / np.sum(np.exp(y))
 
-    return z, f, i, C_bar, C, o, h, y, p
+    return x, f, i, C_bar, C, o, h, y, p
 
 def forward(inputs, targets, memory):
     """
@@ -129,6 +150,7 @@ def forward(inputs, targets, memory):
         # I will refer to this vector as [h X]
         zs[t] = np.row_stack((hs[t - 1], wes[t]))
 
+        # YOUR IMPLEMENTATION should begin from here
         z, f, i, C_bar, C, o, h, y, p = forward_step(zs[t], hs[t - 1], cs[t - 1])
         f_s[t] = f
         i_s[t] = i
@@ -138,44 +160,11 @@ def forward(inputs, targets, memory):
         hs[t] = h
         y_s[t] = y
         p_s[t] = p
-        loss_t = -np.log(p_s[t][targets[t], 0])
-        loss += loss_t
-
-        # YOUR IMPLEMENTATION should begin from here
-
-        # compute the forget gate
-        # f_gate = sigmoid (W_f \cdot [h X] + b_f)
-
-        # compute the input gate
-        # i_gate = sigmoid (W_i \cdot [h X] + b_i)
-
-        # compute the candidate memory
-        # \hat{c} = tanh (W_c \cdot [h X] + b_c])
-
-        # new memory: applying forget gate on the previous memory
-        # and then adding the input gate on the candidate memory
-        # c_new = f_gate * prev_c + i_gate * \hat{c}
-
-        # output gate
-        # o_gate = sigmoid (Wo \cdot [h X] + b_o)
-
-        # new hidden state for the LSTM
-        # h = o_gate * tanh(c_new)
-
-        # DONE LSTM
-        # output layer - softmax and cross-entropy loss
-        # unnormalized log probabilities for next chars
-
-        # o = Why \cdot h + by
-
-        # softmax for probabilities for next chars
-        # p = softmax(o)
 
         # cross-entropy loss
         # cross entropy loss at time t:
-        # create an one hot vector for the label y
-
-        # and then cross-entropy (see the elman-rnn file for the hint)
+        loss_t = -np.log(p_s[t][targets[t], 0])
+        loss += loss_t
 
     # define your activations
     memory = (hs[len(inputs) - 1], cs[len(inputs) - 1])
@@ -197,42 +186,56 @@ def backward_step(target, dh_next, dC_next, C_prev, z, f, i, C_bar, C, o, h, y, 
     dy = np.copy(p)
     dy[target] -= 1
 
+    # hidden to output
     dWhy += np.dot(dy, h.T)
     dby += dy
 
     dh = np.dot(Why.T, dy)
     dh += dh_next
+
     do = dh * tanh(C)
     do = dsigmoid(o) * do
-    dWo += np.dot(do, z.T)
-    dbo += do
 
     dC = np.copy(dC_next)
     dC += dh * o * dtanh(tanh(C))
+
     dC_bar = dC * i
     dC_bar = dC_bar * dtanh(C_bar)
-    dWc += np.dot(dC_bar, z.T)
-    dbc += dC_bar
 
     di = dC * C_bar
     di = dsigmoid(i) * di
-    dWi += np.dot(di, z.T)
-    dbi += di
 
     df = dC * C_prev
     df = dsigmoid(f) * df
+
+    # gate gradients
+    dWo += np.dot(do, z.T)
+    dbo += do
+
+    dWc += np.dot(dC_bar, z.T)
+    dbc += dC_bar
+
+    dWi += np.dot(di, z.T)
+    dbi += di
+
     dWf += np.dot(df, z.T)
     dbf += df
 
-    dz = np.dot(Wf.T, df) \
-         + np.dot(Wi.T, di) \
-         + np.dot(Wc.T, dC_bar) \
-         + np.dot(Wo.T, do)
+    # accumulate gradient from gates
+    dzf = np.dot(Wf.T, df)
+    dzi = np.dot(Wi.T, di)
+    dzc = np.dot(Wc.T, dC_bar)
+    dzo = np.dot(Wo.T, do)
+    dz = dzf + dzi + dzc + dzo
+
+    # split oncatenated z for gradient for old h state
     dh_prev = dz[:hidden_size, :]
+
+    # gradient fo old c state
     dC_prev = f * dC
 
-    de = dz[hidden_size:hidden_size + emb_size:, :]
     # embedding backprop
+    de = dz[hidden_size:hidden_size + emb_size:, :]
     dWex += np.dot(de, x.T)
 
     return dh_prev, dC_prev
@@ -391,4 +394,5 @@ elif option == 'gradcheck':
             rel_error = abs(grad_analytic - grad_numerical) / abs(grad_numerical + grad_analytic + 1e-9)
 
             if rel_error > 0.01:
-                print('WARNING %f, %f => %e ' % (grad_numerical, grad_analytic, rel_error))
+                difference = abs(grad_analytic - grad_numerical)
+                print('WARNING %f, %f => %e (difference: %e)' % (grad_numerical, grad_analytic, rel_error, difference))
