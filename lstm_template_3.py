@@ -251,6 +251,7 @@ def backward(activations, clipping = True):
     # backward pass: compute gradients going backwards
     # Here we allocate memory for the gradients
 
+    # made gradient variables global, so they don't have to be passed as parameters to backward_step
     global dWf, dWi, dWc, dWo, dWhy, dWex
     global dbf, dbi, dbc, dbo, dby
     dWex, dWhy = np.zeros_like(Wex), np.zeros_like(Why)
@@ -263,13 +264,13 @@ def backward(activations, clipping = True):
     # similar to the hidden states in the vanilla RNN
     # We need to initialize the gradients for these variables
     dh_next = np.zeros_like(hs[0])
-    dC_next = np.zeros_like(cs[0])
+    dc_next = np.zeros_like(cs[0])
 
     # back propagation through time starts here
     for t in reversed(range(len(inputs))):
         # IMPLEMENT YOUR BACKPROP HERE
         # refer to the file elman_rnn.py for more details
-        dh_next, dC_next = backward_step(target = targets[t], dh_next = dh_next, dc_next = dC_next, c_prev = cs[t - 1],
+        dh_next, dc_next = backward_step(target = targets[t], dh_next = dh_next, dc_next = dc_next, c_prev = cs[t - 1],
                                          z = zs[t], f = f_s[t], i = i_s[t], c_hat = c_hat_s[t], c = cs[t], o = o_s[t],
                                          h = hs[t], y = y_s[t], p = p_s[t], x = xs[t])
 
