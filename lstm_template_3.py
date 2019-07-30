@@ -80,28 +80,28 @@ def forward_step(x, h_prev, C_prev):
 
     # compute the forget gate
     # f_gate = sigmoid (W_f \cdot [h X] + b_f)
-    f = sigmoid(np.dot(Wf, x) + bf)
+    f_gate = sigmoid(np.dot(Wf, x) + bf)
 
     # compute the input gate
     # i_gate = sigmoid (W_i \cdot [h X] + b_i)
-    i = sigmoid(np.dot(Wi, x) + bi)
+    i_gate = sigmoid(np.dot(Wi, x) + bi)
 
     # compute the candidate memory
     # \hat{c} = tanh (W_c \cdot [h X] + b_c])
-    C_bar = tanh(np.dot(Wc, x) + bc)
+    c_hat = tanh(np.dot(Wc, x) + bc)
 
     # new memory: applying forget gate on the previous memory
     # and then adding the input gate on the candidate memory
     # c_new = f_gate * prev_c + i_gate * \hat{c}
-    C = f * C_prev + i * C_bar
+    c_new = f_gate * C_prev + i_gate * c_hat
 
     # output gate
     # o_gate = sigmoid (Wo \cdot [h X] + b_o)
-    o = sigmoid(np.dot(Wo, x) + bo)
+    o_gate = sigmoid(np.dot(Wo, x) + bo)
 
     # new hidden state for the LSTM
     # h = o_gate * tanh(c_new)
-    h = o * tanh(C)
+    h = o_gate * tanh(c_new)
 
     # DONE LSTM
     # output layer - softmax and cross-entropy loss
@@ -114,7 +114,7 @@ def forward_step(x, h_prev, C_prev):
     # p = softmax(o)
     p = np.exp(y) / np.sum(np.exp(y))
 
-    return x, f, i, C_bar, C, o, h, y, p
+    return x, f_gate, i_gate, c_hat, c_new, o_gate, h, y, p
 
 def forward(inputs, targets, memory):
     """
@@ -130,7 +130,7 @@ def forward(inputs, targets, memory):
     # Here you should allocate some variables to store the activations during forward
     # One of them here is to store the hiddens and the cells
     hs, cs = { }, { }
-    xs, wes, zs, f_s, i_s, C_bar_s, C_s, o_s, y_s, p_s = { }, { }, { }, { }, { }, { }, { }, { }, { }, { }
+    xs, wes, zs, f_s, i_s, c_hat_s, o_s, y_s, p_s = { }, { }, { }, { }, { }, { }, { }, { }, { }
 
     hs[-1] = np.copy(hprev)
     cs[-1] = np.copy(cprev)
@@ -151,12 +151,12 @@ def forward(inputs, targets, memory):
         zs[t] = np.row_stack((hs[t - 1], wes[t]))
 
         # YOUR IMPLEMENTATION should begin from here
-        z, f, i, C_bar, C, o, h, y, p = forward_step(zs[t], hs[t - 1], cs[t - 1])
-        f_s[t] = f
-        i_s[t] = i
-        C_bar_s[t] = C_bar
-        cs[t] = C
-        o_s[t] = o
+        z, f_gate, i_gate, c_hat, c_new, o_gate, h, y, p = forward_step(zs[t], hs[t - 1], cs[t - 1])
+        f_s[t] = f_gate
+        i_s[t] = i_gate
+        c_hat_s[t] = c_hat
+        cs[t] = c_new
+        o_s[t] = o_gate
         hs[t] = h
         y_s[t] = y
         p_s[t] = p
@@ -168,7 +168,7 @@ def forward(inputs, targets, memory):
 
     # define your activations
     memory = (hs[len(inputs) - 1], cs[len(inputs) - 1])
-    activations = (xs, wes, zs, f_s, i_s, C_bar_s, C_s, o_s, y_s, p_s, hs, cs)
+    activations = (xs, wes, zs, f_s, i_s, c_hat_s, o_s, y_s, p_s, hs, cs)
 
     return loss, activations, memory
 
@@ -251,7 +251,7 @@ def backward(activations, clipping = True):
     dWf, dWi, dWc, dWo = np.zeros_like(Wf), np.zeros_like(Wi), np.zeros_like(Wc), np.zeros_like(Wo)
     dbf, dbi, dbc, dbo = np.zeros_like(bf), np.zeros_like(bi), np.zeros_like(bc), np.zeros_like(bo)
 
-    (xs, wes, zs, f_s, i_s, C_bar_s, C_s, o_s, y_s, p_s, hs, cs) = activations
+    (xs, wes, zs, f_s, i_s, C_bar_s, o_s, y_s, p_s, hs, cs) = activations
 
     # similar to the hidden states in the vanilla RNN
     # We need to initialize the gradients for these variables
