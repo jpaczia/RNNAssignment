@@ -30,6 +30,11 @@ def softmax(x):
     e_x = np.exp(x - np.max(x))
     return e_x / e_x.sum()
 
+def shape_check(actual_shape, expected_shape, name):
+    if actual_shape != expected_shape:
+        msg = "ERROR shape of parameter \"{0}\" not as expected: {1} != {2}".format(name, actual_shape, expected_shape)
+        raise ValueError(msg)
+
 # data I/O
 data = open('data/input.txt', 'r').read()  # should be simple plain text file
 chars = list(set(data))
@@ -73,10 +78,10 @@ dWex, dWhy = np.zeros_like(Wex), np.zeros_like(Why)
 dWf, dWi, dWc, dWo = np.zeros_like(Wf), np.zeros_like(Wi), np.zeros_like(Wc), np.zeros_like(Wo)
 dbf, dbi, dbc, dbo = np.zeros_like(bf), np.zeros_like(bi), np.zeros_like(bc), np.zeros_like(bo)
 
-def forward_step(x, h_prev, C_prev):
-    assert x.shape == (hidden_size + emb_size, 1)
-    assert h_prev.shape == (hidden_size, 1)
-    assert C_prev.shape == (hidden_size, 1)
+def forward_step(x, h_prev, c_prev):
+    shape_check(actual_shape = x.shape, expected_shape = (hidden_size + emb_size, 1), name = "x")
+    shape_check(actual_shape = h_prev.shape, expected_shape = (hidden_size , 1), name = "h_prev")
+    shape_check(actual_shape = c_prev.shape, expected_shape = (hidden_size , 1), name = "c_prev")
 
     # compute the forget gate
     # f_gate = sigmoid (W_f \cdot [h X] + b_f)
@@ -93,7 +98,7 @@ def forward_step(x, h_prev, C_prev):
     # new memory: applying forget gate on the previous memory
     # and then adding the input gate on the candidate memory
     # c_new = f_gate * prev_c + i_gate * \hat{c}
-    c_new = f_gate * C_prev + i_gate * c_hat
+    c_new = f_gate * c_prev + i_gate * c_hat
 
     # output gate
     # o_gate = sigmoid (Wo \cdot [h X] + b_o)
@@ -176,12 +181,14 @@ def backward_step(target, dh_next, dc_next, c_prev, z, f, i, c_hat, c, o, h, y, 
     global dWf, dWi, dWc, dWo, dWhy, dWex
     global dbf, dbi, dbc, dbo, dby
 
-    assert z.shape == (emb_size + hidden_size, 1)
-    assert y.shape == (vocab_size, 1)
-    assert p.shape == (vocab_size, 1)
+    shape_check(actual_shape = z.shape, expected_shape = (emb_size+hidden_size,1),name="z")
+    shape_check(actual_shape = y.shape, expected_shape = (vocab_size,1),name="y")
+    shape_check(actual_shape = p.shape, expected_shape = (vocab_size,1),name="p")
 
-    for param in [dh_next, dc_next, c_prev, f, i, c_hat, c, o, h]:
-        assert param.shape == (hidden_size, 1)
+    for param, n in zip([dh_next, dc_next, c_prev, f, i, c_hat, c, o, h],
+                     ["dh_next", "dc_next", "c_prev", "f", "i", "c_hat", "c", "o", "h"]):
+        shape_check(actual_shape = param.shape, expected_shape = (hidden_size,1), name = n )
+
 
     dy = np.copy(p)
     dy[target] -= 1
