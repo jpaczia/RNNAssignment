@@ -172,7 +172,7 @@ def forward(inputs, targets, memory):
 
     return loss, activations, memory
 
-def backward_step(target, dh_next, dC_next, C_prev, z, f, i, C_bar, C, o, h, y, p, x):
+def backward_step(target, dh_next, dc_next, c_prev, z, f, i, c_hat, c, o, h, y, p, x):
     global dWf, dWi, dWc, dWo, dWhy, dWex
     global dbf, dbi, dbc, dbo, dby
 
@@ -180,7 +180,7 @@ def backward_step(target, dh_next, dC_next, C_prev, z, f, i, C_bar, C, o, h, y, 
     assert y.shape == (vocab_size, 1)
     assert p.shape == (vocab_size, 1)
 
-    for param in [dh_next, dC_next, C_prev, f, i, C_bar, C, o, h]:
+    for param in [dh_next, dc_next, c_prev, f, i, c_hat, c, o, h]:
         assert param.shape == (hidden_size, 1)
 
     dy = np.copy(p)
@@ -193,19 +193,19 @@ def backward_step(target, dh_next, dC_next, C_prev, z, f, i, C_bar, C, o, h, y, 
     dh = np.dot(Why.T, dy)
     dh += dh_next
 
-    do = dh * tanh(C)
+    do = dh * tanh(c)
     do = dsigmoid(o) * do
 
-    dC = np.copy(dC_next)
-    dC += dh * o * dtanh(tanh(C))
+    dC = np.copy(dc_next)
+    dC += dh * o * dtanh(tanh(c))
 
     dC_bar = dC * i
-    dC_bar = dC_bar * dtanh(C_bar)
+    dC_bar = dC_bar * dtanh(c_hat)
 
-    di = dC * C_bar
+    di = dC * c_hat
     di = dsigmoid(i) * di
 
-    df = dC * C_prev
+    df = dC * c_prev
     df = dsigmoid(f) * df
 
     # gate gradients
@@ -251,7 +251,7 @@ def backward(activations, clipping = True):
     dWf, dWi, dWc, dWo = np.zeros_like(Wf), np.zeros_like(Wi), np.zeros_like(Wc), np.zeros_like(Wo)
     dbf, dbi, dbc, dbo = np.zeros_like(bf), np.zeros_like(bi), np.zeros_like(bc), np.zeros_like(bo)
 
-    (xs, wes, zs, f_s, i_s, C_bar_s, o_s, y_s, p_s, hs, cs) = activations
+    (xs, wes, zs, f_s, i_s, c_hat_s, o_s, y_s, p_s, hs, cs) = activations
 
     # similar to the hidden states in the vanilla RNN
     # We need to initialize the gradients for these variables
@@ -262,8 +262,8 @@ def backward(activations, clipping = True):
     for t in reversed(range(len(inputs))):
         # IMPLEMENT YOUR BACKPROP HERE
         # refer to the file elman_rnn.py for more details
-        dh_next, dC_next = backward_step(target = targets[t], dh_next = dh_next, dC_next = dC_next, C_prev = cs[t - 1],
-                                         z = zs[t], f = f_s[t], i = i_s[t], C_bar = C_bar_s[t], C = cs[t], o = o_s[t],
+        dh_next, dC_next = backward_step(target = targets[t], dh_next = dh_next, dc_next = dC_next, c_prev = cs[t - 1],
+                                         z = zs[t], f = f_s[t], i = i_s[t], c_hat = c_hat_s[t], c = cs[t], o = o_s[t],
                                          h = hs[t], y = y_s[t], p = p_s[t], x = xs[t])
 
     if clipping:
