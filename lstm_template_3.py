@@ -6,6 +6,7 @@ BSD License
 import numpy as np
 from random import uniform
 import sys
+from tqdm import tqdm
 
 
 
@@ -48,10 +49,12 @@ option = sys.argv[1]
 
 # hyperparameters
 emb_size = 4
-hidden_size = 192  # size of hidden layer of neurons
-seq_length = 96  # number of steps to unroll the RNN for
+hidden_size = 32  # size of hidden layer of neurons
+seq_length = 64  # number of steps to unroll the RNN for
 learning_rate = 5e-2
 max_updates = 500000
+
+# hidden_size, seq_length = 196, 96  # for better sampling quality
 
 concat_size = emb_size + hidden_size
 
@@ -360,6 +363,8 @@ if option == 'train':
             break
 
 elif option == 'gradcheck':
+    counter_all = 0
+    counter_warnings = 0
 
     p = 0
     inputs = [char_to_ix[ch] for ch in data[p:p + seq_length]]
@@ -376,15 +381,15 @@ elif option == 'gradcheck':
     gradients = backward(activations, clipping = False)
     dWex, dWf, dWi, dWo, dWc, dbf, dbi, dbo, dbc, dWhy, dby = gradients
 
-    for weight, grad, name in zip([Wf, Wi, Wo, Wc, bf, bi, bo, bc, Wex, Why, by],
+    for weight, grad, name in (zip([Wf, Wi, Wo, Wc, bf, bi, bo, bc, Wex, Why, by],
                                   [dWf, dWi, dWo, dWc, dbf, dbi, dbo, dbc, dWex, dWhy, dby],
-                                  ['Wf', 'Wi', 'Wo', 'Wc', 'bf', 'bi', 'bo', 'bc', 'Wex', 'Why', 'by']):
+                                  ['Wf', 'Wi', 'Wo', 'Wc', 'bf', 'bi', 'bo', 'bc', 'Wex', 'Why', 'by'])):
 
         str_ = ("Dimensions dont match between weight and gradient %s and %s." % (weight.shape, grad.shape))
         assert (weight.shape == grad.shape), str_
 
         print(name)
-        for i in range(weight.size):
+        for i in (range(weight.size)):
 
             # evaluate cost at [x + delta] and [x - delta]
             w = weight.flat[i]
@@ -398,9 +403,14 @@ elif option == 'gradcheck':
             grad_numerical = (loss_positive - loss_negative) / (2 * delta)
 
             # compare the relative error between analytical and numerical gradients
-            # rel_error = abs(grad_analytic - grad_numerical) / abs(grad_numerical + grad_analytic)
-            rel_error = abs(grad_analytic - grad_numerical) / abs(grad_numerical + grad_analytic + 1e-9)
+            rel_error = abs(grad_analytic - grad_numerical) / abs(grad_numerical + grad_analytic)
+            # rel_error = abs(grad_analytic - grad_numerical) / abs(grad_numerical + grad_analytic + 1e-9)
+
+            counter_all += 1
 
             if rel_error > 0.01:
                 difference = abs(grad_analytic - grad_numerical)
                 print('WARNING %f, %f => %e (difference: %e)' % (grad_numerical, grad_analytic, rel_error, difference))
+                counter_warnings += 1
+
+    print("{0}% warnings".format((counter_warnings / counter_all)*100.0))
